@@ -1,0 +1,683 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ASR - Artificial Scientific Reviewing</title>
+    <script crossorigin src="{% static 'react.production.min.js' %}"></script>
+    <script crossorigin src="{% static 'react-dom.production.min.js' %}"></script>
+    <script src="{% static 'babel.min.js' %}"></script>
+    <script>
+        // Load Tailwind - use local file if available, otherwise CDN
+        (function() {
+            var s = document.createElement('script');
+            s.src = "{% static 'tailwind.min.js' %}";
+            s.onerror = function() {
+                var fallback = document.createElement('script');
+                fallback.src = 'https://cdn.tailwindcss.com';
+                document.head.appendChild(fallback);
+            };
+            document.head.appendChild(s);
+        })();
+    </script>
+</head>
+<body>
+    <div id="root"></div>
+
+    {% verbatim %}
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        // Simple icon components
+        const Icon = ({ name, className = "w-6 h-6" }) => {
+          const icons = {
+            upload: <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>,
+            file: <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>,
+            check: <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>,
+            alert: <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>,
+            search: <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>,
+            download: <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>,
+            refresh: <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>,
+            sparkles: <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" /></svg>,
+            warning: <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>,
+            clipboard: <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+          };
+          return icons[name] || icons.file;
+        };
+
+        function ASRDashboard() {
+          const [file, setFile] = useState(null);
+          const [analyzing, setAnalyzing] = useState(false);
+          const [results, setResults] = useState(null);
+          const [dragActive, setDragActive] = useState(false);
+          const [progress, setProgress] = useState(0);
+          const [currentStep, setCurrentStep] = useState('');
+          const [error, setError] = useState(null);
+
+          useEffect(() => {
+            if (analyzing) {
+              const steps = [
+                { label: 'Uploading file...', duration: 500 },
+                { label: 'Extracting content...', duration: 800 },
+                { label: 'Checking scope alignment...', duration: 1000 },
+                { label: 'Analyzing grammar and style...', duration: 1200 },
+                { label: 'Searching similar papers...', duration: 1500 },
+                { label: 'Generating final decision...', duration: 500 }
+              ];
+
+              let totalTime = 0;
+              steps.forEach((step, index) => {
+                setTimeout(() => {
+                  setCurrentStep(step.label);
+                  setProgress(((index + 1) / steps.length) * 100);
+                }, totalTime);
+                totalTime += step.duration;
+              });
+            }
+          }, [analyzing]);
+
+          const handleDrag = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (e.type === "dragenter" || e.type === "dragover") {
+              setDragActive(true);
+            } else if (e.type === "dragleave") {
+              setDragActive(false);
+            }
+          };
+
+          const handleDrop = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setDragActive(false);
+
+            if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+              handleFile(e.dataTransfer.files[0]);
+            }
+          };
+
+          const handleFileInput = (e) => {
+            if (e.target.files && e.target.files[0]) {
+              handleFile(e.target.files[0]);
+            }
+          };
+
+          const handleFile = async (uploadedFile) => {
+            setFile(uploadedFile);
+            setProgress(0);
+            setAnalyzing(true);
+            setError(null);
+
+            const formData = new FormData();
+            formData.append('file', uploadedFile);
+
+            try {
+              const response = await fetch('/api/analyze/', {
+                method: 'POST',
+                body: formData
+              });
+
+              if (!response.ok) {
+                throw new Error('Error analyzing file');
+              }
+
+              const data = await response.json();
+
+              setTimeout(() => {
+                setAnalyzing(false);
+                setResults(data);
+              }, 500);
+
+            } catch (err) {
+              setAnalyzing(false);
+              setError(err.message || 'Server connection error');
+              console.error('Error:', err);
+            }
+          };
+
+          const handleDownloadPDF = async () => {
+            if (!results) return;
+
+            try {
+              const response = await fetch('/api/generate-pdf/', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(results)
+              });
+
+              if (!response.ok) {
+                throw new Error('Error generating PDF');
+              }
+
+              const blob = await response.blob();
+              const url = window.URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = `${results.manuscript_title.replace(/ /g, '_')}_Review.pdf`;
+              document.body.appendChild(a);
+              a.click();
+              window.URL.revokeObjectURL(url);
+              document.body.removeChild(a);
+
+            } catch (err) {
+              alert('Error downloading PDF: ' + err.message);
+            }
+          };
+
+          const handleDownloadWord = async () => {
+            if (!results) return;
+
+            try {
+              const response = await fetch('/api/generate-word/', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(results)
+              });
+
+              if (!response.ok) {
+                throw new Error('Error generating Word document');
+              }
+
+              const blob = await response.blob();
+              const url = window.URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = `${results.manuscript_title.replace(/ /g, '_')}_Review.docx`;
+              document.body.appendChild(a);
+              a.click();
+              window.URL.revokeObjectURL(url);
+              document.body.removeChild(a);
+
+            } catch (err) {
+              alert('Error downloading Word: ' + err.message);
+            }
+          };
+
+          const getDecisionColor = (decision) => {
+            const colors = {
+              'Accept': 'from-green-500 to-emerald-600',
+              'Minor Revision': 'from-yellow-500 to-orange-500',
+              'Major Revision': 'from-orange-500 to-red-500',
+              'Reject': 'from-red-500 to-pink-600'
+            };
+            return colors[decision] || 'from-blue-500 to-indigo-600';
+          };
+
+          return (
+            <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 relative overflow-hidden">
+              {/* Animated Background */}
+              <div className="absolute inset-0 overflow-hidden pointer-events-none">
+                <div className="absolute top-20 left-20 w-72 h-72 bg-blue-300 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse"></div>
+                <div className="absolute top-40 right-20 w-96 h-96 bg-indigo-300 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse" style={{animationDelay: '2s'}}></div>
+                <div className="absolute -bottom-32 left-1/2 w-96 h-96 bg-purple-300 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse" style={{animationDelay: '4s'}}></div>
+              </div>
+
+              {/* Header */}
+              <header className="relative bg-white/80 backdrop-blur-xl border-b border-gray-200/50 shadow-lg">
+                <div className="max-w-7xl mx-auto px-6 py-5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-4">
+                      <div className="relative">
+                        <div className="absolute inset-0 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-2xl blur-lg opacity-50 animate-pulse"></div>
+                        <div className="relative w-14 h-14 bg-gradient-to-br from-blue-600 via-indigo-600 to-purple-600 rounded-2xl flex items-center justify-center transform hover:scale-110 transition-transform duration-300">
+                          <Icon name="sparkles" className="w-8 h-8 text-white" />
+                        </div>
+                      </div>
+                      <div>
+                        <h1 className="text-3xl font-black bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+                          ASR System
+                        </h1>
+                        <p className="text-sm font-medium text-gray-600">Artificial Scientific Reviewing</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center space-x-3">
+                      <div className="px-4 py-2 bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-xl">
+                        <div className="flex items-center space-x-2">
+                          <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                          <span className="text-sm font-semibold text-green-700">Online</span>
+                        </div>
+                      </div>
+                      <div className="px-4 py-2 bg-white/80 border border-gray-200 rounded-xl backdrop-blur-sm">
+                        <span className="text-sm font-semibold text-gray-700">Demo </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </header>
+
+              {/* Main Content */}
+              <main className="relative max-w-7xl mx-auto px-6 py-12">
+                {!results && !analyzing && (
+                  <div className="animate-fadeIn">
+                    {/* Upload Section */}
+                    <div className="bg-white/90 backdrop-blur-xl rounded-3xl p-12 shadow-2xl border border-gray-200">
+                      <div className="text-center mb-8">
+                        <h2 className="text-4xl font-black text-gray-900 mb-3">
+                          Upload Your Manuscript
+                        </h2>
+                        <p className="text-lg text-gray-600">
+                          Get comprehensive AI-powered review
+                        </p>
+                      </div>
+
+                      {/* Drag & Drop */}
+                      <div
+                        className={`relative border-4 border-dashed rounded-3xl p-16 transition-all duration-300 ${
+                          dragActive
+                            ? 'border-blue-500 bg-blue-50'
+                            : 'border-gray-300 bg-gray-50 hover:border-blue-400 hover:bg-blue-50/50'
+                        }`}
+                        onDragEnter={handleDrag}
+                        onDragLeave={handleDrag}
+                        onDragOver={handleDrag}
+                        onDrop={handleDrop}
+                      >
+                        <input
+                          type="file"
+                          id="fileInput"
+                          className="hidden"
+                          accept=".pdf,.doc,.docx"
+                          onChange={handleFileInput}
+                        />
+
+                        <div className="text-center space-y-6">
+                          <div className="relative inline-block">
+                            <div className="absolute inset-0 bg-gradient-to-r from-blue-400 to-indigo-400 rounded-full blur-2xl opacity-30 animate-pulse"></div>
+                            <div className="relative w-24 h-24 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full mx-auto flex items-center justify-center shadow-2xl">
+                              <Icon name="upload" className="w-12 h-12 text-white" />
+                            </div>
+                          </div>
+
+                          <div className="space-y-2">
+                            <p className="text-xl font-bold text-gray-900">
+                              Drop your file here
+                            </p>
+                            <p className="text-gray-600">
+                              or click to browse
+                            </p>
+                          </div>
+
+                          <button
+                            onClick={() => document.getElementById('fileInput').click()}
+                            className="inline-flex items-center space-x-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-8 py-4 rounded-2xl font-bold text-lg hover:shadow-2xl transform hover:scale-105 transition-all duration-300"
+                          >
+                            <Icon name="file" className="w-6 h-6" />
+                            <span>Select File</span>
+                          </button>
+
+                          <p className="text-sm text-gray-500">
+                            Supported formats: PDF, DOC, DOCX
+                          </p>
+                        </div>
+                      </div>
+
+                      {error && (
+                        <div className="mt-6 bg-red-50 border-l-4 border-red-500 p-4 rounded-lg">
+                          <div className="flex items-center">
+                            <Icon name="alert" className="w-6 h-6 text-red-500 mr-3" />
+                            <p className="text-red-700 font-semibold">{error}</p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Features */}
+                    <div className="grid md:grid-cols-4 gap-6 mt-12">
+                      <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 border border-gray-200 hover:shadow-xl transition-all duration-300">
+                        <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-pink-600 rounded-xl flex items-center justify-center mb-4">
+                          <Icon name="clipboard" className="w-6 h-6 text-white" />
+                        </div>
+                        <h3 className="text-xl font-bold text-gray-900 mb-2">Scope Check</h3>
+                        <p className="text-gray-600">Verify manuscript alignment with journal scope</p>
+                      </div>
+
+                      <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 border border-gray-200 hover:shadow-xl transition-all duration-300">
+                        <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl flex items-center justify-center mb-4">
+                          <Icon name="check" className="w-6 h-6 text-white" />
+                        </div>
+                        <h3 className="text-xl font-bold text-gray-900 mb-2">Final Decision</h3>
+                        <p className="text-gray-600">AI-powered recommendation: Accept/Revise/Reject</p>
+                      </div>
+
+                      <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 border border-gray-200 hover:shadow-xl transition-all duration-300">
+                        <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center mb-4">
+                          <Icon name="search" className="w-6 h-6 text-white" />
+                        </div>
+                        <h3 className="text-xl font-bold text-gray-900 mb-2">Similarity Check</h3>
+                        <p className="text-gray-600">Deep plagiarism detection with examples</p>
+                      </div>
+
+                      <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 border border-gray-200 hover:shadow-xl transition-all duration-300">
+                        <div className="w-12 h-12 bg-gradient-to-br from-orange-500 to-red-600 rounded-xl flex items-center justify-center mb-4">
+                          <Icon name="download" className="w-6 h-6 text-white" />
+                        </div>
+                        <h3 className="text-xl font-bold text-gray-900 mb-2">PDF + Word</h3>
+                        <p className="text-gray-600">Download editable Word and PDF reports</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Analysis Progress */}
+                {analyzing && (
+                  <div className="bg-white/90 backdrop-blur-xl rounded-3xl p-12 shadow-2xl border border-gray-200 animate-fadeIn">
+                    <div className="text-center space-y-8">
+                      <div className="relative inline-block">
+                        <div className="w-24 h-24 border-8 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
+                      </div>
+
+                      <div className="space-y-4">
+                        <h3 className="text-3xl font-black text-gray-900">Analyzing Your Manuscript</h3>
+                        <p className="text-xl text-gray-600">{currentStep}</p>
+
+                        <div className="max-w-md mx-auto">
+                          <div className="h-4 bg-gray-200 rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 transition-all duration-500 ease-out"
+                              style={{ width: `${progress}%` }}
+                            ></div>
+                          </div>
+                          <p className="text-sm font-semibold text-gray-600 mt-2">{Math.round(progress)}%</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Results */}
+                {results && (
+                  <div className="space-y-6 animate-fadeIn">
+                    {/* Manuscript Info */}
+                    <div className="bg-white rounded-3xl p-8 shadow-xl border border-gray-200">
+                      <div className="flex items-start justify-between">
+                        <div className="space-y-2">
+                          <div className="flex items-center space-x-2 text-sm text-gray-500">
+                            <Icon name="file" className="w-4 h-4" />
+                            <span>Manuscript ID: {results.manuscript_id}</span>
+                          </div>
+                          <h2 className="text-2xl font-bold text-gray-900">{results.manuscript_title}</h2>
+                          <p className="text-sm text-gray-600">Review Date: {results.date}</p>
+                        </div>
+                        <div className="flex items-center space-x-3">
+                          <button
+                            onClick={handleDownloadWord}
+                            className="flex items-center space-x-2 bg-gradient-to-r from-green-600 to-emerald-600 text-white px-6 py-3 rounded-xl font-bold hover:shadow-lg transform hover:scale-105 transition-all duration-300"
+                          >
+                            <Icon name="clipboard" className="w-5 h-5" />
+                            <span>Word</span>
+                          </button>
+                          <button
+                            onClick={handleDownloadPDF}
+                            className="flex items-center space-x-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-3 rounded-xl font-bold hover:shadow-lg transform hover:scale-105 transition-all duration-300"
+                          >
+                            <Icon name="download" className="w-5 h-5" />
+                            <span>PDF</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Suggested Final Decision */}
+                    {results.final_decision && (
+                      <div className={`bg-gradient-to-r ${getDecisionColor(results.final_decision.decision)} rounded-3xl p-8 shadow-xl text-white`}>
+                        <h2 className="text-2xl font-black mb-4">Suggested Final Decision</h2>
+                        <div className="bg-white/20 backdrop-blur-sm rounded-2xl p-6 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <span className="text-lg font-bold">Decision:</span>
+                            <span className="text-2xl font-black">{results.final_decision.decision}</span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-lg font-bold">Confidence:</span>
+                            <span className="text-xl font-bold capitalize">{results.final_decision.confidence}</span>
+                          </div>
+                          <div className="pt-3 border-t border-white/30">
+                            <p className="text-lg">{results.final_decision.justification}</p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Summary and Scope */}
+                    {results.scope_analysis && (
+                      <div className="bg-white rounded-3xl p-8 shadow-xl border border-gray-200 space-y-6">
+                        <h2 className="text-2xl font-bold text-gray-900">Manuscript Summary</h2>
+                        <p className="text-gray-700 leading-relaxed">{results.scope_analysis.summary}</p>
+
+                        <div className="border-t pt-6">
+                          <h3 className="text-xl font-bold text-gray-900 mb-3">Scope Assessment</h3>
+                          <div className="space-y-3">
+                            <div className="flex items-center space-x-3">
+                              <span className="font-bold text-gray-700">In Scope:</span>
+                              <span className={`px-4 py-2 rounded-full font-bold ${results.scope_analysis.in_scope ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                                {results.scope_analysis.in_scope ? 'Yes ✓' : 'No ✗'}
+                              </span>
+                            </div>
+                            {results.scope_analysis.scope_categories && results.scope_analysis.scope_categories.length > 0 && (
+                              <div>
+                                <span className="font-bold text-gray-700">Relevant Categories:</span>
+                                <div className="flex flex-wrap gap-2 mt-2">
+                                  {results.scope_analysis.scope_categories.map((cat, idx) => (
+                                    <span key={idx} className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm font-semibold">
+                                      {cat}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            <div className="pt-2">
+                              <span className="font-bold text-gray-700">Justification:</span>
+                              <p className="text-gray-600 mt-1">{results.scope_analysis.scope_justification}</p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Minor Issues */}
+                    <div className="bg-white rounded-3xl p-8 shadow-xl border border-gray-200 space-y-6">
+                      <div className="flex items-center space-x-3">
+                        <div className="w-12 h-12 bg-gradient-to-br from-yellow-500 to-orange-600 rounded-2xl flex items-center justify-center shadow-lg">
+                          <Icon name="alert" className="w-6 h-6 text-white" />
+                        </div>
+                        <div>
+                          <h2 className="text-2xl font-bold text-gray-900">Minor Deficiencies</h2>
+                          <p className="text-sm text-gray-600">{results.minor_issues.total_count} issues detected</p>
+                        </div>
+                      </div>
+
+                      <div className="space-y-3 max-h-96 overflow-y-auto">
+                        {results.minor_issues.issues && results.minor_issues.issues.length > 0 ? (
+                          results.minor_issues.issues.map((item, idx) => (
+                            <div key={idx} className={`bg-gradient-to-r ${item.type === 'grammar' ? 'from-orange-50 to-yellow-50 border-orange-200' : 'from-red-50 to-pink-50 border-red-200'} rounded-xl p-4 border-2 hover:shadow-lg transition-all duration-300`}>
+                              <div className="space-y-2">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-xs font-bold text-gray-500">{item.location}</span>
+                                  <span className={`text-xs font-bold px-3 py-1 rounded-full ${item.type === 'grammar' ? 'bg-orange-200 text-orange-800' : 'bg-red-200 text-red-800'}`}>
+                                    {item.type}
+                                  </span>
+                                </div>
+                                <p className="font-mono text-sm">
+                                  <span className="text-red-600 line-through">{item.incorrect}</span>
+                                  <span className="mx-2 text-gray-400">→ correct to:</span>
+                                  <span className="text-green-600 font-bold">{item.correct}</span>
+                                </p>
+                                <p className="text-xs text-gray-600 italic">{item.message}</p>
+                              </div>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="text-center py-8 text-gray-500">
+                            <Icon name="check" className="w-12 h-12 mx-auto mb-3 text-green-500" />
+                            <p className="font-semibold">No significant grammatical issues detected!</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Major Issues WITH EXAMPLES */}
+                    <div className="bg-white rounded-3xl p-8 shadow-xl border border-gray-200 space-y-6">
+                      <div className="flex items-center space-x-3">
+                        <div className="w-12 h-12 bg-gradient-to-br from-red-500 to-pink-600 rounded-2xl flex items-center justify-center shadow-lg">
+                          <Icon name="warning" className="w-6 h-6 text-white" />
+                        </div>
+                        <h2 className="text-2xl font-bold text-gray-900">Major Revision Required</h2>
+                      </div>
+
+                      <div className="space-y-4">
+                        {results.major_issues && results.major_issues.map((issue, idx) => (
+                          <div key={idx} className="bg-gradient-to-r from-red-50 to-orange-50 rounded-xl p-6 border-2 border-red-200">
+                            <h3 className="text-lg font-bold text-gray-900 mb-2">
+                              {idx + 1}. {issue.category}
+                            </h3>
+                            <p className="text-sm text-gray-700 mb-3">{issue.issue}</p>
+
+                            {/* NEW: Display example if available */}
+                            {issue.example && (
+                              <div className="bg-yellow-50 rounded-lg p-4 border-l-4 border-yellow-500 mb-3">
+                                <p className="text-sm font-semibold text-yellow-900">
+                                  <span className="text-yellow-600">💡 Example:</span> {issue.example}
+                                </p>
+                              </div>
+                            )}
+
+                            <div className="bg-white/80 rounded-lg p-4 border-l-4 border-blue-500">
+                              <p className="text-sm font-semibold text-blue-900">
+                                <span className="text-blue-600">→ Recommendation:</span> {issue.recommendation}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Similarity Report */}
+                    <div className="bg-white rounded-3xl p-8 shadow-xl border border-gray-200 space-y-6">
+                      <div className="flex items-center space-x-3">
+                        <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl flex items-center justify-center shadow-lg">
+                          <Icon name="search" className="w-6 h-6 text-white" />
+                        </div>
+                        <h2 className="text-2xl font-bold text-gray-900">Similarity Analysis</h2>
+                      </div>
+
+                      <div className="space-y-4">
+                        <div className="relative">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-sm font-bold text-gray-700">Overall Similarity</span>
+                            <span className="text-3xl font-black text-blue-600">{results.similarity.overall}%</span>
+                          </div>
+                          <div className="relative h-8 bg-gray-200 rounded-full overflow-hidden shadow-inner">
+                            <div className="absolute h-full bg-gradient-to-r from-green-500 via-blue-500 to-indigo-500 rounded-full shadow-lg transition-all duration-1000" style={{width: `${results.similarity.overall}%`}}>
+                              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent animate-pulse"></div>
+                            </div>
+                          </div>
+                          <p className={`text-sm font-semibold mt-2 ${results.similarity.overall < 20 ? 'text-green-600' : 'text-orange-600'}`}>
+                            {results.similarity.overall < 20 ? '✓ Within acceptable range' : '⚠ Requires detailed review'}
+                          </p>
+                        </div>
+
+                        {results.similarity.sources && results.similarity.sources.length > 0 && (
+                          <div className="space-y-3 mt-6">
+                            <h3 className="text-lg font-bold text-gray-900">Similar Publications</h3>
+                            {results.similarity.sources.map((source, idx) => (
+                              <div key={idx} className="bg-blue-50 rounded-xl p-4 border border-blue-200 hover:shadow-lg transition-all duration-300">
+                                <div className="flex items-start justify-between mb-2">
+                                  <span className="text-xs font-black px-3 py-1 bg-blue-200 text-blue-800 rounded-full">
+                                    {source.similarity}% similar
+                                  </span>
+                                  <Icon name="file" className="w-5 h-5 text-blue-600" />
+                                </div>
+                                <p className="font-bold text-gray-900 text-sm mb-1">{source.title}</p>
+                                <p className="text-xs text-gray-600">{source.author}</p>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Download Section */}
+                    <div className="relative group overflow-hidden rounded-3xl">
+                      <div className="absolute inset-0 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 animate-gradient"></div>
+                      <div className="relative bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 p-10 text-white">
+                        <div className="flex items-center justify-between">
+                          <div className="space-y-3">
+                            <h3 className="text-3xl font-black">Full Report Ready!</h3>
+                            <p className="text-xl text-blue-100">Download PDF or editable Word document</p>
+                          </div>
+                          <div className="flex items-center space-x-3">
+                            <button
+                              onClick={handleDownloadWord}
+                              className="flex items-center space-x-3 bg-white text-green-600 px-8 py-4 rounded-2xl font-black text-lg hover:bg-green-50 transition-all duration-300 transform hover:scale-110 shadow-2xl"
+                            >
+                              <Icon name="clipboard" className="w-6 h-6" />
+                              <span>Word</span>
+                            </button>
+                            <button
+                              onClick={handleDownloadPDF}
+                              className="flex items-center space-x-3 bg-white text-blue-600 px-8 py-4 rounded-2xl font-black text-lg hover:bg-blue-50 transition-all duration-300 transform hover:scale-110 shadow-2xl"
+                            >
+                              <Icon name="download" className="w-6 h-6" />
+                              <span>PDF</span>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Analyze Another */}
+                    <div className="text-center pt-6">
+                      <button
+                        onClick={() => { setResults(null); setFile(null); setError(null); }}
+                        className="inline-flex items-center space-x-2 text-blue-600 font-bold hover:text-blue-700 transition-colors"
+                      >
+                        <Icon name="refresh" className="w-5 h-5" />
+                        <span>Analyze Another Manuscript</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </main>
+
+              {/* Footer */}
+              <footer className="relative mt-20 bg-white/80 backdrop-blur-xl border-t border-gray-200 py-8">
+                <div className="max-w-7xl mx-auto px-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-bold text-gray-900">ASR - Artificial Scientific Reviewing</p>
+                      <p className="text-xs text-gray-600 mt-1">AI-powered manuscript review system Demo </p>
+                    </div>
+                  </div>
+                </div>
+              </footer>
+
+              <style>{`
+                @keyframes fadeIn {
+                  from { opacity: 0; transform: translateY(20px); }
+                  to { opacity: 1; transform: translateY(0); }
+                }
+                .animate-fadeIn {
+                  animation: fadeIn 0.6s ease-out;
+                }
+                @keyframes gradient {
+                  0%, 100% { background-position: 0% 50%; }
+                  50% { background-position: 100% 50%; }
+                }
+                .animate-gradient {
+                  background-size: 200% 200%;
+                  animation: gradient 3s ease infinite;
+                }
+              `}</style>
+            </div>
+          );
+        }
+
+        ReactDOM.render(<ASRDashboard />, document.getElementById('root'));
+    </script>
+    {% endverbatim %}
+</body>
+</html>
